@@ -102,6 +102,10 @@ class PositionSource(SpyglassMixin, dj.Manual):
             )
 
             for index, pdict in enumerate(epoch_list):
+                # Modification for local git branch 'add_pos' only for adding newly tracked position into spyglass
+                # skip spatial series if "led" not in name, which are old fake position data
+                if "led" not in pdict.get("name"):
+                    continue
                 spat_series.append(
                     dict(
                         **sess_key,
