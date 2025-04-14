@@ -130,7 +130,7 @@ class SortedSpikesGroup(SpyglassMixin, dj.Manual):
     def fetch_spike_data(
         cls,
         key: dict,
-        time_slice: list[float] = None,
+        time_slice: Union[list[float], slice] = None,
         return_unit_ids: bool = False,
     ) -> Union[list[np.ndarray], Optional[list[dict]]]:
         """fetch spike times for units in the group
@@ -139,7 +139,7 @@ class SortedSpikesGroup(SpyglassMixin, dj.Manual):
         ----------
         key : dict
             dictionary containing the group key
-        time_slice : list of float, optional
+        time_slice : list of float or slice, optional
             if provided, filter for spikes occurring in the interval [start, stop], by default None
         return_unit_ids : bool, optional
             if True, return the unit_ids along with the spike times, by default False
@@ -189,8 +189,14 @@ class SortedSpikesGroup(SpyglassMixin, dj.Manual):
             ]
 
             # filter the spike times based on the labels if present
-            if "label" in nwb_file[nwb_field_name]:
-                group_label_list = nwb_file[nwb_field_name]["label"].to_list()
+            for col in ("label", "curation_label"):  # v0, v1 names
+                if col in nwb_file[nwb_field_name].columns:
+                    group_labels = nwb_file[nwb_field_name][col]
+                    break
+            else:
+                group_labels = None
+            if group_labels is not None:
+                group_label_list = group_labels.to_list()
                 include_unit = SortedSpikesGroup.filter_units(
                     group_label_list, include_labels, exclude_labels
                 )
@@ -202,6 +208,8 @@ class SortedSpikesGroup(SpyglassMixin, dj.Manual):
 
             # filter the spike times based on the time slice if provided
             if time_slice is not None:
+                if isinstance(time_slice, (list, tuple)):
+                    time_slice = slice(*time_slice)
                 sorting_spike_times = [
                     times[
                         np.logical_and(
