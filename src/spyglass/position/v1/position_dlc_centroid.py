@@ -28,8 +28,35 @@ schema = dj.schema("position_v1_dlc_centroid")
 
 @schema
 class DLCCentroidParams(SpyglassMixin, dj.Manual):
-    """
-    Parameters for calculating the centroid
+    """Parameters for calculating the centroid
+
+    Parameters
+    ----------
+    dlc_centroid_params_name : str
+        Name for this set of parameters
+    params : dict
+        Dictionary of parameters, including...
+        centroid_method : str
+            Method for determining centroid. Options are:
+            'two_pt_centroid': Two-point centroid calculation
+            'four_led_centroid': Four-LED centroid calculation
+            'null': No centroid calculation
+        points : dict
+            Dictionary of bodyparts to use for centroid calculation
+        interpolate : bool
+            Whether to interpolate over NaNs in the data
+        interp_params : dict
+            Parameters for interpolation like max_cm_to_interp: float
+        smooth : bool
+            Whether to smooth the data
+        smoothing_params : dict
+            Parameters for smoothing the data
+            smoothing_duration : float
+            smooth_method : str (e.g. 'moving_avg')
+        max_LED_separation : float
+            Maximum separation between LEDs for centroid calculation
+        speed_smoothing_std_dev : float
+            Standard deviation for Gaussian smoothing of speed data
     """
 
     definition = """
@@ -86,9 +113,10 @@ class DLCCentroidParams(SpyglassMixin, dj.Manual):
             options=_key_to_points.keys(),
             name="centroid_method",
         )
+        points = params.get("points")
         validate_list(  # Ensure points are valid for centroid method
-            required_items=set(params["points"].keys()),
-            option_list=params["points"],
+            required_items=set(points),
+            option_list=points,
             name="points",
             condition=centroid_method,
         )
@@ -182,7 +210,7 @@ class DLCCentroid(SpyglassMixin, dj.Computed):
 
         # Handle the null centroid case
         if centroid_method == "null":
-            logger.logger.warning("Null centroid method selected")
+            logger.warning("Null centroid method selected")
             analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
             null_obj_id = AnalysisNwbfile().add_nwb_object(
                 analysis_file_name, pd.DataFrame()
@@ -281,7 +309,7 @@ class DLCCentroid(SpyglassMixin, dj.Computed):
         if query := (RawPosition() & key):
             spatial_series = query.fetch_nwb()[0]["raw_position"]
         else:
-            spatial_series = None
+            spatial_series = None  # pragma: no cover
 
         common_attrs = {
             "conversion": METERS_PER_CM,
@@ -338,12 +366,13 @@ class DLCCentroid(SpyglassMixin, dj.Computed):
 
     def fetch1_dataframe(self) -> pd.DataFrame:
         """Fetch a single dataframe."""
+        _ = self.ensure_single_entry()
         nwb_data = self.fetch_nwb()[0]
+        position = nwb_data["dlc_position"]
+        if getattr(position, "empty", False):
+            return position
         index = pd.Index(
-            np.asarray(
-                nwb_data["dlc_position"].get_spatial_series().timestamps
-            ),
-            name="time",
+            np.asarray(position.get_spatial_series().timestamps), name="time"
         )
         COLUMNS = [
             "video_frame_ind",

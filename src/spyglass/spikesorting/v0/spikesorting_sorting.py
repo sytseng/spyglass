@@ -29,6 +29,60 @@ schema = dj.schema("spikesorting_sorting")
 
 @schema
 class SpikeSorterParameters(SpyglassMixin, dj.Manual):
+    """Parameters for spike sorting algorithms.
+
+    Parameters
+    ----------
+    sorter: str
+        Name of the spike sorting algorithm.
+    sorter_params_name: str
+        Name of the parameter set for the spike sorting algorithm.
+    sorter_params: dict
+        Dictionary of parameters for the spike sorting algorithm.
+        The keys and values depend on the specific algorithm being used.
+        For example, for the "mountainsort4" algorithm, the parameters are...
+            detect_sign: int
+                Sign of the detected spikes. 1 for positive, -1 for negative.
+            adjacency_radius: int
+                Radius for adjacency graph. Determines which channels are
+                considered neighbors.
+            freq_min: int
+                Minimum frequency for bandpass filter.
+            freq_max: int
+                Maximum frequency for bandpass filter.
+            filter: bool
+                Whether to apply bandpass filter.
+            whiten: bool
+                Whether to whiten the data.
+            num_workers: int
+                Number of workers to use for parallel processing.
+            clip_size: int
+                Size of the clips to extract for spike detection.
+            detect_threshold: float
+                Threshold for spike detection.
+            detect_interval: int
+                Minimum interval between detected spikes.
+        For the "clusterless_thresholder" algorithm, the parameters are...
+            detect_threshold: float
+                microvolt detection threshold for spike detection.
+            method: str
+                Method for spike detection. Options are "locally_exclusive" or
+                "global".
+            peak_sign: enum ("neg", "pos")
+                Sign of the detected peaks.
+            exclude_sweep_ms: float
+                Exclusion time in milliseconds for detected spikes.
+            local_radius_um: int
+                Local radius in micrometers for spike detection.
+            noise_levels: np.ndarray
+                Noise levels for spike detection.
+            random_chunk_kwargs: dict
+                Additional arguments for random chunk processing.
+            outputs: str
+                Output type for spike detection. Options are "sorting" or
+                "labels".
+    """
+
     definition = """
     sorter: varchar(32)
     sorter_params_name: varchar(64)
@@ -128,6 +182,8 @@ class SpikeSorting(SpyglassMixin, dj.Computed):
     time_of_sort: int   # in Unix time, to the nearest second
     """
 
+    _parallel_make = True
+
     def make(self, key: dict):
         """Runs spike sorting on the data and parameters specified by the
         SpikeSortingSelection table and inserts a new entry to SpikeSorting table.
@@ -139,26 +195,22 @@ class SpikeSorting(SpyglassMixin, dj.Computed):
            (this is redundant with 2; will change in the future)
 
         """
-        # CBroz: does this not work w/o arg? as .populate() ?
-        recording_path = (SpikeSortingRecording & key).fetch1("recording_path")
-        recording = si.load_extractor(recording_path)
+        recording = SpikeSortingRecording().load_recording(key)
 
         # first, get the timestamps
         timestamps = SpikeSortingRecording._get_recording_timestamps(recording)
         _ = recording.get_sampling_frequency()
+
         # then concatenate the recordings
         # Note: the timestamps are lost upon concatenation,
         # i.e. concat_recording.get_times() doesn't return true timestamps anymore.
         # but concat_recording.recoring_list[i].get_times() will return correct
         # timestamps for ith recording.
-        if recording.get_num_segments() > 1 and isinstance(
-            recording, si.AppendSegmentRecording
-        ):
-            recording = si.concatenate_recordings(recording.recording_list)
-        elif recording.get_num_segments() > 1 and isinstance(
-            recording, si.BinaryRecordingExtractor
-        ):
-            recording = si.concatenate_recordings([recording])
+        if recording.get_num_segments() > 1:
+            if isinstance(recording, si.AppendSegmentRecording):
+                recording = si.concatenate_recordings(recording.recording_list)
+            elif isinstance(recording, si.BinaryRecordingExtractor):
+                recording = si.concatenate_recordings([recording])
 
         # load artifact intervals
         artifact_times = (
@@ -249,7 +301,7 @@ class SpikeSorting(SpyglassMixin, dj.Computed):
         """Placeholder to override mixin method"""
         raise NotImplementedError
 
-    def cleanup(self, dry_run=False):
+    def cleanup(self, dry_run=False, verbose=True):
         """Clean up spike sorting directories that are not in the table."""
         sort_dir = Path(sorting_dir)
         tracked = set(self.fetch("sorting_path"))
@@ -259,7 +311,9 @@ class SpikeSorting(SpyglassMixin, dj.Computed):
         if dry_run:
             return untracked
 
-        for folder in tqdm(untracked, desc="Removing untracked folders"):
+        for folder in tqdm(
+            untracked, desc="Removing untracked folders", disable=not verbose
+        ):
             try:
                 shutil.rmtree(folder)
             except PermissionError:
@@ -273,7 +327,5 @@ class SpikeSorting(SpyglassMixin, dj.Computed):
         )
         return sorting_name
 
-    # TODO: write a function to import sorting done outside of dj
-
     def _import_sorting(self, key):
-        raise NotImplementedError
+        raise NotImplementedError("Not supported in V0. Use V1 instead.")

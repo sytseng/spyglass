@@ -17,6 +17,7 @@ schema = dj.schema("behavior_v1_moseq")
 @schema
 class MoseqModelParams(SpyglassMixin, dj.Lookup):
     """Parameters for training a moseq model
+
     Relevant parameters (keys in model_params):
     - skeleton: list of tuples of bodyparts to connect
     - num_ar_iters: number of iterations to run the autoregressive model
@@ -402,6 +403,7 @@ class MoseqSyllable(SpyglassMixin, dj.Computed):
         self.insert1(key)
 
     def fetch1_dataframe(self):
+        _ = self.ensure_single_entry()
         dataframe = self.fetch_nwb()[0]["moseq"]
         dataframe.set_index("time", inplace=True)
         return dataframe

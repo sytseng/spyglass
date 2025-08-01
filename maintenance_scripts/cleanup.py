@@ -11,6 +11,7 @@ import warnings
 from pathlib import Path
 
 from spyglass.common import AnalysisNwbfile, Nwbfile
+from spyglass.common.common_version import SpyglassVersions
 from spyglass.decoding.decoding_merge import DecodingOutput
 from spyglass.decoding.v1.clusterless import schema as clusterless_schema
 from spyglass.decoding.v1.sorted_spikes import schema as spikes_schema
@@ -28,9 +29,9 @@ def run_table_cleanups():
     """Run respective table cleanups"""
     Nwbfile().cleanup()  # cleanup 'raw' externals
     AnalysisNwbfile().cleanup()  # delete orphans, cleanup 'analysis' externals
-    SpikeSorting().cleanup()  # remove unreferenced sorting_dir files
+    SpikeSorting().cleanup(verbose=False)  # remove unreferenced sorting_dir
     DecodingOutput().cleanup()  # remove `.nc` and `.pkl` files
-    SpikeSortingRecording().cleanup()  # remove untracked folders
+    SpikeSortingRecording().cleanup(verbose=False)  # remove untracked folders
 
 
 def cleanup_external_files():
@@ -72,8 +73,13 @@ def cleanup_temp_dir(days_old: int = 7, dry_run: bool = True):
 
 
 def main():
+    print("Updating Spyglass versions table...")
+    SpyglassVersions().fetch_from_pypi()
+    print("Running table cleanups...")
     run_table_cleanups()
+    print("Cleaning up external files...")
     cleanup_external_files()
+    print("Cleaning up temporary directory...")
     cleanup_temp_dir(dry_run=False)
 
 
