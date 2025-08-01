@@ -11,19 +11,36 @@
 Table update script
 
 ```python
-# -- For recompute --
-import datajoint as dj
-from spyglass.spikesorting.v1 import recording as v1rec  # noqa
-from spyglass.spikesorting.v0 import spikesorting_recording as v0rec  # noqa
+# -- For TrackGraph --
 from spyglass.linearization.v1.main import TrackGraph  # noqa
+
+TrackGraph.alter()  # Add edge map parameter
+
+# -- For dropping deprecated tables --
+import datajoint as dj
 
 dj.FreeTable(dj.conn(), "common_nwbfile.analysis_nwbfile_log").drop()
 dj.FreeTable(dj.conn(), "common_session.session_group").drop()
-TrackGraph.alter()  # Add edge map parameter
-v0rec.SpikeSortingRecording().alter()
-v0rec.SpikeSortingRecording().update_ids()
-v1rec.SpikeSortingRecording().alter()
-v1rec.SpikeSortingRecording().update_ids()
+
+# -- For v0 recompute --
+from spyglass.spikesorting.v0.spikesorting_recording import (
+    SpikeSortingRecording,
+    SpikeSortingRecordingSelection,
+    IntervalList,
+)
+
+SpikeSortingRecording().alter()
+SpikeSortingRecording().update_ids()
+
+# -- For v1 recompute --
+from spyglass.spikesorting.v1.recording import (
+    SpikeSortingRecording,
+    SpikeSortingRecordingSelection,
+    AnalysisNwbfile,
+)
+
+SpikeSortingRecording().alter()
+SpikeSortingRecording().update_ids()
 
 # -- For LFP pipeline --
 from spyglass.lfp.lfp_imported import ImportedLFP
@@ -57,16 +74,19 @@ ImportedLFP().drop()
 - Ensure merge tables are declared during file insertion #1205
 - Update URL for DANDI Docs #1210
 - Add common method `get_position_interval_epoch` #1056
-- Improve cron job documentation and script #1226, #1241, #1257
+- Improve cron job documentation and script #1226, #1241, #1257, #1328
 - Update export process to include `~external` tables #1239
 - Only add merge parts to `source_class_dict` if present in codebase #1237
 - Remove cli module #1250
 - Fix column error in `check_threads` method #1256
-- Add recompute ability for `SpikeSortingRecording` for both v0 and v1 #1093
+- Export python env and store in newly created analysis files #1270
+- Enforce single table entry in `fetch1_dataframe` calls #1270
+- Add recompute ability for `SpikeSortingRecording` for both v0 and v1 #1093,
+    #1311
 - Track Spyglass version in dedicated table for enforcing updates #1281
 - Pin to `datajoint>=0.14.4` for `dj.Top` and long make call fix #1281
 - Remove outdated code comments #1304
-- Add code coverage badge #1305
+- Add code coverage badge, and increase position coverage #1305, #1315
 
 ### Documentation
 
@@ -76,9 +96,10 @@ ImportedLFP().drop()
 ### Pipelines
 
 - Common
-    - Set `probe_id` as `probe_description` when inserting from nwb file #1220
     - Default `AnalysisNwbfile.create` permissions are now 777 #1226
     - Make `Nwbfile.fetch_nwb` functional # 1256
+    - Calculate mode of timestep size in log scale when estimating sampling rate
+        #1270
     - Ingest all `ImageSeries` objects in nwb file to `VideoFile` #1278
     - Allow ingestion of multi-row task epoch tables #1278
     - Add `SensorData` to `populate_all_common` #1281
@@ -86,14 +107,22 @@ ImportedLFP().drop()
     - Allow storage of numpy arrays using `AnalysisNwbfile.add_nwb_object` #1298
     - `IntervalList.fetch_interval` now returns `Interval` object #1293
     - Correct name parsing in Session.Experimenter insertion #1306
+    - Allow insert with dio events but no e-series data #1318
+    - Prompt user to verify compatibility between new insert and existing table
+        entries # 1318, #1350
+    - Skip empty timeseries ingestion (`PositionSource`, `DioEvents`) #1347
 - Position
     - Allow population of missing `PositionIntervalMap` entries during population
         of `DLCPoseEstimation` #1208
     - Enable import of existing pose data to `ImportedPose` in position pipeline
         #1247
+    - Change key value `position_source` to "imported" during ingestion #1270
+    - Define orientation as `nan` for single-led data #1270
     - Sanitize new project names for unix file system #1247
     - Add arg to return percent below threshold in `get_subthresh_inds` #1304,
         #1305
+    - Accept imported timestamps defined by `rate` and `start_time` #1322
+    - Fix bug preventing DLC config updates #1352
 - Spikesorting
     - Fix compatibility bug between v1 pipeline and `SortedSpikesGroup` unit
         filtering #1238, #1249
@@ -102,9 +131,15 @@ ImportedLFP().drop()
     - Revise cleanup for `v0.SpikeSorting` #1271
     - Fix type compatibility of `time_slice` in
         `SortedSpikesGroup.fetch_spike_data` #1261
+    - Update transaction and parallel make settings for `v0` and `v1`
+        `SpikeSorting` tables #1270
     - Disable make transactionsfor `CuratedSpikeSorting` #1288
     - Refactor `SpikeSortingOutput.get_restricted_merge_ids` #1304
     - Add burst merge curation #1209
+    - Reconcile spikeinterface value for `channel_id` when `channel_name` column
+        present in nwb file electrodes table #1310, #1334
+    - Ensure matching order of returned merge_ids and nwb files in
+        `SortedSpikesGroup.fetch_spike_data` #1320
 - Behavior
     - Implement pipeline for keypoint-moseq extraction of behavior syllables #1056
 - LFP
@@ -116,6 +151,7 @@ ImportedLFP().drop()
     - Updating the LFPBandSelection logic with comprehensive validation and batch
         insertion for electrodes and references. #1280
     - Implement `ImportedLFP.make()` for ingestion from nwb files #1278, #1302
+    - Skip empty timeseries ingestion for `ImportedLFP` #1347
 
 ## [0.5.4] (December 20, 2024)
 

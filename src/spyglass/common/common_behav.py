@@ -79,9 +79,10 @@ class PositionSource(SpyglassMixin, dj.Manual):
         nwbf = get_nwb_file(nwb_file_name)
         all_pos = get_all_spatial_series(nwbf, verbose=True)
         sess_key = Nwbfile.get_file_key(nwb_file_name)
-        src_key = dict(**sess_key, source="trodes", import_file_name="")
+        src_key = dict(**sess_key, source="imported", import_file_name="")
 
         if all_pos is None:
+            logger.info(f"No position data found in {nwb_file_name}. Skipping.")
             return
 
         sources = []
@@ -336,7 +337,7 @@ class StateScriptFile(SpyglassMixin, dj.Imported):
             epoch_list = associated_file_obj.task_epochs.split(",")
             # only insert if this is the statescript file
             logger.info(associated_file_obj.description)
-            this_desc = associated_file_obj.description.upper
+            this_desc = associated_file_obj.description.upper()
 
             if (
                 "statescript".upper() in this_desc
