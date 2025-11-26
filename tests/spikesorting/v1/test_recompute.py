@@ -1,10 +1,12 @@
 from pathlib import Path
 
+import datajoint as dj
 import pytest
 
 from tests.conftest import VERBOSE
 
 
+@pytest.mark.slow
 def test_recompute(spike_v1, pop_rec, common):
     key = spike_v1.SpikeSortingRecording().fetch(
         "analysis_file_name", as_dict=True
@@ -38,22 +40,25 @@ def recomp_selection(recomp_module):
 
 
 @pytest.fixture(scope="module")
-def recomp_tbl(recomp_module):
+def recomp_tbl(recomp_module, recomp_selection, spike_v1, pop_rec):
     """Fixture to ensure recompute table is loaded."""
-    yield recomp_module.RecordingRecompute()
-
-
-def test_recompute_env(spike_v1, pop_rec, recomp_selection, recomp_tbl):
-    """Test recompute to temp_dir"""
     _ = spike_v1, pop_rec  # Ensure pop_rec is used to load the recording
 
     key = recomp_selection.fetch("KEY")[0]
     key["logged_at_creation"] = False  # Prevent skip of recompute
     recomp_selection.update1(key)
 
+    recomp_tbl = recomp_module.RecordingRecompute()
     recomp_tbl.populate()
 
-    ret = (recomp_tbl & key).fetch("matched")[0]
+    yield recomp_tbl
+
+
+@pytest.mark.slow
+def test_recompute_env(recomp_tbl):
+    """Test recompute to temp_dir"""
+
+    ret = (recomp_tbl & dj.Top()).fetch("matched")[0]
     assert ret, "Recompute failed"
 
 
@@ -69,3 +74,11 @@ def test_delete_dry_run(caplog, recomp_tbl):
     """Test dry run delete."""
     _ = recomp_tbl.delete_files(dry_run=True)
     assert "DRY" in caplog.text, "Dry run delete failed to log"
+
+
+@pytest.mark.slow
+def test_recheck(recomp_tbl):
+    """Test that recheck works."""
+    key = recomp_tbl.fetch("KEY")[0]
+    result = recomp_tbl.recheck(key)
+    assert result, "Recheck failed"
